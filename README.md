@@ -1,8 +1,8 @@
-# flywheel
+# flywheel-long-running-research
 
 > Agents learn daily. Vault notes go stale. Flywheel closes the loop.
 
-A Go CLI that syncs tagged learnings from agent daily logs into your Obsidian vault.
+A Go CLI that syncs tagged learnings from agent daily logs into your Obsidian vault, with semantic matching via QMD.
 
 ## How It Works
 
@@ -14,14 +14,12 @@ Agents mark learnings in their daily logs:
 [STALE] topic | this note is outdated
 ```
 
-Flywheel reads those, matches them to vault notes, and creates/updates accordingly.
+Flywheel reads those, uses QMD to semantically match topics to existing vault notes, and creates/updates accordingly.
 
 ## Install
 
 ```bash
-go install github.com/cyperx84/flywheel/cmd/flywheel@latest
-# or
-brew install cyperx84/tap/flywheel
+go install github.com/cyperx84/flywheel-long-running-research/cmd/flywheel@latest
 ```
 
 ## Commands
@@ -35,6 +33,8 @@ flywheel sync --agent builder          # single agent
 flywheel sync --dry-run                # preview only
 flywheel sync --json                   # machine-readable output
 ```
+
+Uses QMD for semantic matching when available. Falls back to topic ID matching.
 
 ### `flywheel freshness`
 
@@ -51,23 +51,33 @@ flywheel verify "ollama-setup"         # mark as current
 flywheel verify --all                  # verify everything
 ```
 
+## Matching
+
+1. **QMD semantic** (preferred): queries the vault's QMD index to find the best matching note by topic + content
+2. **Topic ID fallback**: converts topic to kebab-case slug (e.g., `ollama-setup` → `ollama-setup.md`)
+
 ## Config
 
-`~/.config/flywheel/config.json` (optional — has sane defaults):
+`~/.config/flywheel/config.json`:
 
 ```json
 {
   "agents": ["builder", "researcher", "ops"],
   "workspace": "~/.openclaw/agents",
   "vault": "~/path/to/obsidian/vault",
-  "freshness_days": 30
+  "freshness_days": 30,
+  "qmd_bin": "~/.bun/bin/qmd"
 }
 ```
 
 ## Dependencies
 
 - `obsidian-cli` for vault writes
-- That's it. No database, no LLM calls, no runtime deps.
+- `qmd` for semantic matching (optional — falls back to topic ID)
+
+## Cron
+
+A daily cron job runs `flywheel sync` at 8am Brisbane time and posts results to Discord.
 
 ## License
 
