@@ -1,0 +1,27 @@
+version: 2
+
+builds:
+  - main: ./cmd/flywheel
+    binary: flywheel
+    ldflags:
+      - -s -w -X github.com/cyperx84/flywheel/cmd/flywheel/cmd.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

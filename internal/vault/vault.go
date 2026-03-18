@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -14,7 +15,7 @@ type Note struct {
 	Tags     []string
 	Aliases  []string
 	Folder   string // optional subfolder (e.g., "claw", "ideas")
-	Modified string // ISO date
+	Modified string // ISO datetime
 }
 
 // Create writes a new note to the vault using obsidian-cli.
@@ -37,6 +38,7 @@ created: %s
 modified: %s
 tags:
 %s
+topics: []
 refs: []
 aliases:
 %s
@@ -79,7 +81,43 @@ func UpdateFrontmatter(noteID, key, value string) error {
 	return nil
 }
 
-// Search finds notes matching a query.
+// AppendContent appends text to an existing vault note by direct file edit.
+// Per vault constitution, direct edits to existing note content are allowed.
+func AppendContent(noteID, content string) error {
+	// Use obsidian-cli to find the note path, then append
+	cmd := exec.Command("obsidian-cli", "search-content", noteID)
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("finding note %s: %w", noteID, err)
+	}
+
+	// Get the first matching file path
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return fmt.Errorf("note %s not found", noteID)
+	}
+
+	// The path from obsidian-cli — append content directly
+	notePath := strings.TrimSpace(lines[0])
+
+	f, err := openFileAppend(notePath)
+	if err != nil {
+		return fmt.Errorf("opening note %s: %w", noteID, err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("appending to note %s: %w", noteID, err)
+	}
+
+	return nil
+}
+
+func openFileAppend(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+}
+
+// Search finds notes matching a query via obsidian-cli.
 func Search(query string) (string, error) {
 	cmd := exec.Command("obsidian-cli", "search-content", query)
 	out, err := cmd.CombinedOutput()
