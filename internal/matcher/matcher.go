@@ -78,6 +78,6 @@ func parsePlainTextMatch(text string) (noteID string, score int, err error) {
 
 // IsAvailable checks if QMD binary exists and is executable.
 func IsAvailable(qmdbin string) bool {
-	cmd := exec.Command(qmdbin, "version")
+	cmd := exec.Command(qmdbin, "--help")
 	return cmd.Run() == nil
 }
