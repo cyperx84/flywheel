@@ -7,49 +7,71 @@ import (
 	"strings"
 )
 
-// Match uses QMD to find the best matching vault note for a topic.
-// Returns the note ID and relevance score, or empty string if no match.
-func Match(qmdbin, topic, content string) (noteID string, score int, err error) {
+// Related returns up to maxLinks vault notes related to a topic+content query.
+// Used for wikilinks, not for deciding where to write.
+func Related(qmdBin, topic, content string, maxLinks int) []Link {
+	if maxLinks <= 0 {
+		maxLinks = 3
+	}
+
 	query := topic
 	if content != "" {
 		query = fmt.Sprintf("%s %s", topic, content)
 	}
 
-	cmd := exec.Command(qmdbin, "query", query, "--max-results", "1", "--json")
+	cmd := exec.Command(qmdBin, "query", query, "--max-results", fmt.Sprintf("%d", maxLinks), "--json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", 0, fmt.Errorf("qmd query: %w\n%s", err, string(out))
+		return nil
 	}
 
-	// Parse QMD JSON output
+	// QMD prints warnings before JSON — find the opening bracket
+	raw := string(out)
+	jsonStart := strings.Index(raw, "[")
+	if jsonStart < 0 {
+		return nil
+	}
+
 	var results []qmdResult
-	if err := json.Unmarshal(out, &results); err != nil {
-		// Fallback: try parsing plain text output
-		return parsePlainTextMatch(string(out))
+	if err := json.Unmarshal([]byte(raw[jsonStart:]), &results); err != nil {
+		return nil
 	}
 
-	if len(results) == 0 {
-		return "", 0, nil
+	var links []Link
+	for _, r := range results {
+		if r.Score < 0.40 {
+			continue // skip very weak matches
+		}
+		noteID := extractNoteID(r.File)
+		if noteID != "" {
+			links = append(links, Link{
+				NoteID: noteID,
+				Title:  r.Title,
+				Score:  int(r.Score * 100),
+			})
+		}
 	}
+	return links
+}
 
-	// Extract note ID from qmd://vault/<id>.md:line format
-	uri := results[0].URI
-	noteID = extractNoteID(uri)
-	score = results[0].Score
-
-	return noteID, score, nil
+// Link is a related vault note.
+type Link struct {
+	NoteID string
+	Title  string
+	Score  int
 }
 
 type qmdResult struct {
-	URI   string `json:"uri"`
-	Title string `json:"title"`
-	Score int    `json:"score"`
+	DocID   string  `json:"docid"`
+	File    string  `json:"file"`
+	Title   string  `json:"title"`
+	Score   float64 `json:"score"`
+	Snippet string  `json:"snippet"`
 }
 
 func extractNoteID(uri string) string {
-	// qmd://vault/note-id.md:25 → note-id
+	// qmd://vault/claw/note-id.md → claw/note-id
 	uri = strings.TrimPrefix(uri, "qmd://vault/")
-	uri = strings.TrimPrefix(uri, "vault/")
 	idx := strings.Index(uri, ".md")
 	if idx > 0 {
 		return uri[:idx]
@@ -57,27 +79,8 @@ func extractNoteID(uri string) string {
 	return uri
 }
 
-func parsePlainTextMatch(text string) (noteID string, score int, err error) {
-	// Parse lines like: qmd://vault/note-id.md:25 #abc123
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, "qmd://vault/") {
-			parts := strings.SplitN(line, " ", 2)
-			noteID = extractNoteID(parts[0])
-			// Try to parse score from surrounding text
-			if len(parts) > 1 && strings.Contains(parts[1], "Score:") {
-				scoreStr := parts[1]
-				fmt.Sscanf(scoreStr, "Score: %d", &score)
-			}
-			return noteID, score, nil
-		}
-	}
-	return "", 0, nil
-}
-
 // IsAvailable checks if QMD binary exists and is executable.
-func IsAvailable(qmdbin string) bool {
-	cmd := exec.Command(qmdbin, "--help")
+func IsAvailable(qmdBin string) bool {
+	cmd := exec.Command(qmdBin, "--help")
 	return cmd.Run() == nil
 }

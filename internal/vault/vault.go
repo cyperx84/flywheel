@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Note represents a vault note to create or update.
@@ -58,16 +59,21 @@ aliases:
 		note.Content,
 	)
 
-	args := []string{"create", note.ID, "--overwrite", "--content", content}
+	// obsidian-cli doesn't have --folder; prepend folder to note ID path
+	noteRef := note.ID
 	if note.Folder != "" {
-		args = append(args, "--folder", note.Folder)
+		noteRef = note.Folder + "/" + note.ID
 	}
+
+	args := []string{"create", noteRef, "--overwrite", "--content", content}
 
 	cmd := exec.Command("obsidian-cli", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("obsidian-cli create: %w\n%s", err, string(out))
 	}
+	// Brief pause for iCloud sync on vault directory
+	time.Sleep(500 * time.Millisecond)
 	return nil
 }
 
@@ -115,6 +121,12 @@ func AppendContent(noteID, content string) error {
 
 func openFileAppend(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+}
+
+// Exists checks if a note already exists in the vault by trying to print it.
+func Exists(noteRef string) bool {
+	cmd := exec.Command("obsidian-cli", "print", noteRef)
+	return cmd.Run() == nil
 }
 
 // Search finds notes matching a query via obsidian-cli.
