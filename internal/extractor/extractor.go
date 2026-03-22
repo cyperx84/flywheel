@@ -23,6 +23,8 @@ func Extract(text string, agent, filePath string) []Entry {
 
 	for _, line := range lines {
 		trimmed := trimSpace(line)
+		// Strip markdown bullet prefixes: "- ", "* ", "1. ", etc.
+		trimmed = stripBullet(trimmed)
 		for _, tag := range []string{TagLearning, TagUpdate, TagStale} {
 			if startsWith(trimmed, tag) {
 				entry := parseTagLine(trimmed, tag, agent, filePath)
@@ -91,6 +93,24 @@ func trimSpace(s string) string {
 
 func startsWith(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func stripBullet(s string) string {
+	// "- text", "* text", "1. text", "2. text", etc.
+	if len(s) >= 2 && (s[0] == '-' || s[0] == '*') && s[1] == ' ' {
+		return trimSpace(s[2:])
+	}
+	// Ordered list: digits followed by ". "
+	for i := 0; i < len(s) && i < 4; i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			continue
+		}
+		if s[i] == '.' && i > 0 && i+1 < len(s) && s[i+1] == ' ' {
+			return trimSpace(s[i+2:])
+		}
+		break
+	}
+	return s
 }
 
 func indexOf(s, sub string) int {
